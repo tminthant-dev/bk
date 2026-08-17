@@ -1,27 +1,23 @@
 const express = require('express');
+const cors = require('cors'); // ⚠️ ဤနေရာတွင် cors ကို ထည့်သွင်းထားပါသည်
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
 
-// CORS ပြဿနာရှင်းလင်းခြင်း
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, apikey, prefer, x-client-info');
-  
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  next();
-});
+// ၁။ ပြီးပြည့်စုံသော CORS စနစ် (OPTIONS 404 Error ကို အမြစ်ပြတ်ရှင်းရန်)
+app.use(cors({
+  origin: '*', // မည်သည့် Domain ကမဆို လှမ်းခေါ်ခွင့်ပြုရန်
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  // Supabase အတွက် မပါမဖြစ် လိုအပ်သော Header များအားလုံးကို ခွင့်ပြုထားခြင်း
+  allowedHeaders: ['Content-Type', 'Authorization', 'apikey', 'prefer', 'x-client-info', 'range']
+}));
 
+// ၂။ Proxy သတ်မှတ်ခြင်း
 const targetUrl = 'https://winkfasmeiuvkckviqqc.supabase.co';
-
-// Proxy လုပ်ဆောင်မည့် အပိုင်းကို Variable တစ်ခုအဖြစ် သတ်မှတ်ခြင်း
 const apiProxy = createProxyMiddleware({
   target: targetUrl,
   changeOrigin: true,
-  ws: true, // Websocket အတွက်
+  ws: true, // Websocket (Realtime) အတွက်
   onProxyRes: function (proxyRes, req, res) {
     proxyRes.headers['Access-Control-Allow-Origin'] = '*';
   }
@@ -29,10 +25,11 @@ const apiProxy = createProxyMiddleware({
 
 app.use('/', apiProxy);
 
+// ၃။ Server စတင်ခြင်း
 const port = process.env.PORT || 3000;
 const server = app.listen(port, () => {
   console.log(`Proxy server is running on port ${port}`);
 });
 
-// ⚠️ အရေးကြီး: Realtime Data (Websocket) တွေ အလုပ်လုပ်ဖို့ ဒီစာကြောင်း မပါမဖြစ် လိုအပ်ပါတယ် ⚠️
+// ၄။ Websocket ဖြတ်သန်းခွင့် အပြည့်အဝ ပေးခြင်း (User App Data မတက်သော ပြဿနာကို ရှင်းရန်)
 server.on('upgrade', apiProxy.upgrade);
