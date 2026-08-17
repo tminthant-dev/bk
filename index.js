@@ -4,71 +4,34 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
 
-const corsOptions = {
-  origin: [
-    'http://127.0.0.1:5500',
-    'http://localhost:5500'
-  ],
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: [
-    'apikey',
-    'Authorization',
-    'Content-Type',
-    'X-Client-Info',
-    'Prefer',
-    'Range'
-  ],
-  exposedHeaders: ['Content-Range']
-};
+// ၁။ CORS ကို အစောဆုံးနှင့် အတိအကျ သတ်မှတ်ခြင်း
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'apikey', 'prefer', 'x-client-info', 'range'],
+  credentials: true
+}));
 
-// CORS
-app.use(cors(corsOptions));
+// ၂။ OPTIONS (Preflight) request အားလုံးကို ချက်ချင်း 200 OK ပြန်ပေးရန်
+app.options('*', cors());
 
-// Preflight
-app.options('*', cors(corsOptions));
-
-
-// =========================
-// Supabase Proxy
-// =========================
-
+// ၃။ Supabase Proxy သတ်မှတ်ခြင်း
 const targetUrl = 'https://winkfasmeiuvkckviqqc.supabase.co';
-
 const apiProxy = createProxyMiddleware({
   target: targetUrl,
   changeOrigin: true,
   ws: true,
-
-  onProxyRes: (proxyRes, req, res) => {
-    const origin = req.headers.origin;
-
-    if (
-      origin === 'http://127.0.0.1:5500' ||
-      origin === 'http://localhost:5500'
-    ) {
-      proxyRes.headers['access-control-allow-origin'] = origin;
-    }
-
-    proxyRes.headers['access-control-allow-methods'] =
-      'GET,POST,PUT,PATCH,DELETE,OPTIONS';
-
-    proxyRes.headers['access-control-allow-headers'] =
-      'apikey,Authorization,Content-Type,X-Client-Info,Prefer,Range';
-
-    proxyRes.headers['access-control-expose-headers'] =
-      'Content-Range';
+  onProxyRes: function (proxyRes, req, res) {
+    proxyRes.headers['Access-Control-Allow-Origin'] = '*';
+    proxyRes.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS';
+    proxyRes.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, apikey, prefer, x-client-info, range';
   }
 });
 
 app.use('/', apiProxy);
 
-
-// =========================
-// Server
-// =========================
-
+// ၄။ Server စတင်ခြင်း
 const port = process.env.PORT || 3000;
-
 const server = app.listen(port, () => {
   console.log(`Proxy server is running on port ${port}`);
 });
