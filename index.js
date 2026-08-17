@@ -85,7 +85,6 @@ const server = app.listen(port, () => {
   console.log(`Proxy server is running on port ${port}`);
 });
 
-
 // ===============================
 // WebSocket / Supabase Realtime
 // ===============================
