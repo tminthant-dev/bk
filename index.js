@@ -1,35 +1,43 @@
 const express = require('express');
-const cors = require('cors'); // ⚠️ ဤနေရာတွင် cors ကို ထည့်သွင်းထားပါသည်
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
 
-// ၁။ ပြီးပြည့်စုံသော CORS စနစ် (OPTIONS 404 Error ကို အမြစ်ပြတ်ရှင်းရန်)
-app.use(cors({
-  origin: '*', // မည်သည့် Domain ကမဆို လှမ်းခေါ်ခွင့်ပြုရန်
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  // Supabase အတွက် မပါမဖြစ် လိုအပ်သော Header များအားလုံးကို ခွင့်ပြုထားခြင်း
-  allowedHeaders: ['Content-Type', 'Authorization', 'apikey', 'prefer', 'x-client-info', 'range']
-}));
+// ၁။ CORS အားလုံးကို အတင်းအကျပ် လက်ခံခိုင်းခြင်း (Manual Override)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  // Header အားလုံးကို လက်ခံရန် (Supabase က တောင်းသမျှ အကုန်ရစေရန်)
+  res.setHeader('Access-Control-Allow-Headers', '*'); 
 
-// ၂။ Proxy သတ်မှတ်ခြင်း
+  // ⚠️ အရေးကြီးဆုံး: OPTIONS request လာပါက Proxy ဆီ ဆက်မပို့ဘဲ ချက်ချင်း 200 (OK) ပြန်ပေးရန်
+  if (req.method === 'OPTIONS') {
+    return res.status(200).send('ok');
+  }
+  
+  next();
+});
+
+// ၂။ Supabase Proxy ချိတ်ဆက်ခြင်း
 const targetUrl = 'https://winkfasmeiuvkckviqqc.supabase.co';
+
 const apiProxy = createProxyMiddleware({
   target: targetUrl,
   changeOrigin: true,
-  ws: true, // Websocket (Realtime) အတွက်
+  ws: true, // Websocket အတွက်
   onProxyRes: function (proxyRes, req, res) {
+    // Supabase ကနေ Data ပြန်လာတဲ့အခါမှာလည်း CORS Header အမြဲပါအောင် အတင်းထည့်ခြင်း
     proxyRes.headers['Access-Control-Allow-Origin'] = '*';
   }
 });
 
 app.use('/', apiProxy);
 
-// ၃။ Server စတင်ခြင်း
+// ၃။ Server လွှင့်ခြင်း
 const port = process.env.PORT || 3000;
 const server = app.listen(port, () => {
   console.log(`Proxy server is running on port ${port}`);
 });
 
-// ၄။ Websocket ဖြတ်သန်းခွင့် အပြည့်အဝ ပေးခြင်း (User App Data မတက်သော ပြဿနာကို ရှင်းရန်)
+// ၄။ Websocket Connection (Realtime) ဖြတ်သန်းခွင့်ပေးခြင်း
 server.on('upgrade', apiProxy.upgrade);
