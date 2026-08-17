@@ -3,39 +3,91 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
 
-// ၁။ CORS အားလုံးကို အတင်းအကျပ် လက်ခံခိုင်းခြင်း (Manual Override)
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  // Header အားလုံးကို လက်ခံရန် (Supabase က တောင်းသမျှ အကုန်ရစေရန်)
-  res.setHeader('Access-Control-Allow-Headers', '*'); 
+const allowedOrigins = [
+  'http://127.0.0.1:5500',
+  'http://localhost:5500',
 
-  // ⚠️ အရေးကြီးဆုံး: OPTIONS request လာပါက Proxy ဆီ ဆက်မပို့ဘဲ ချက်ချင်း 200 (OK) ပြန်ပေးရန်
-  if (req.method === 'OPTIONS') {
-    return res.status(200).send('ok');
+  // Production မှာ မင်း hosting domain ကို ဒီနေရာထည့်
+  // 'https://your-domain.com'
+];
+
+// ===============================
+// CORS
+// ===============================
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
   }
-  
+
+  res.setHeader(
+    'Access-Control-Allow-Methods',
+    'GET, POST, PUT, PATCH, DELETE, OPTIONS'
+  );
+
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'apikey, Authorization, Content-Type, X-Client-Info, Prefer, Range'
+  );
+
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Range');
+
+  // Preflight request
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+
   next();
 });
 
-// ၂။ Supabase Proxy ချိတ်ဆက်ခြင်း
+
+// ===============================
+// Supabase Proxy
+// ===============================
+
 const targetUrl = 'https://winkfasmeiuvkckviqqc.supabase.co';
 
 const apiProxy = createProxyMiddleware({
   target: targetUrl,
   changeOrigin: true,
-  ws: true, // Websocket အတွက်
-  onProxyRes: function (proxyRes, req, res) {
-    // Supabase ကနေ Data ပြန်လာတဲ့အခါမှာလည်း CORS Header အမြဲပါအောင် အတင်းထည့်ခြင်း
-    proxyRes.headers['Access-Control-Allow-Origin'] = '*';
+
+  ws: true,
+
+  onProxyRes: (proxyRes, req, res) => {
+    const origin = req.headers.origin;
+
+    if (origin && allowedOrigins.includes(origin)) {
+      proxyRes.headers['access-control-allow-origin'] = origin;
+    }
+
+    proxyRes.headers['access-control-allow-methods'] =
+      'GET, POST, PUT, PATCH, DELETE, OPTIONS';
+
+    proxyRes.headers['access-control-allow-headers'] =
+      'apikey, Authorization, Content-Type, X-Client-Info, Prefer, Range';
+
+    proxyRes.headers['access-control-expose-headers'] =
+      'Content-Range';
   }
 });
 
 app.use('/', apiProxy);
-// ၃။ Server လွှင့်ခြင်း
+
+
+// ===============================
+// Server
+// ===============================
+
 const port = process.env.PORT || 3000;
+
 const server = app.listen(port, () => {
   console.log(`Proxy server is running on port ${port}`);
 });
-// ၄။ Websocket Connection (Realtime) ဖြတ်သန်းခွင့်ပေးခြင်း
+
+
+// ===============================
+// WebSocket / Supabase Realtime
+// ===============================
+
 server.on('upgrade', apiProxy.upgrade);
